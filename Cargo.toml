@@ -8,12 +8,16 @@ version = "0.1.0"
 cortex-m = "0.6.3"
 cortex-m-rt = "0.6.13"
 cortex-m-rtic = "0.5.5"
-embedded-hal = "*"
+embedded-hal = "0.2.4"
 panic-halt = "0.2.0"
 
 [dependencies.stm32f1xx-hal]
 features = ["rt", "stm32f103", "medium"]
 version = "0.7.0"
+
+[dependencies.rtt-target]
+features = ["cortex-m"]
+version = "0.2.2"
 
 [profile.dev]
 
