@@ -21,7 +21,7 @@ const LED_PERIOD: u32 = 8_000_000;
 
 /// On board LED type alias
 type OnBoardLED =
-    stm32f1xx_hal::gpio::gpioa::PA5<stm32f1xx_hal::gpio::Output<stm32f1xx_hal::gpio::PushPull>>;
+    stm32f1xx_hal::gpio::gpioc::PC13<stm32f1xx_hal::gpio::Output<stm32f1xx_hal::gpio::PushPull>>;
 
 #[app(device=stm32f1xx_hal::device, monotonic=rtic::cyccnt::CYCCNT, peripherals=true)]
 const APP: () = {
@@ -34,6 +34,8 @@ const APP: () = {
         btn_down: buttons::BtnDown,
         /// Buttons for play and pause actions
         btn_playpause: buttons::BtnPlayPause,
+        /// RFID Tag reader
+        tagreader: tagreader::TagReader,
     }
 
     #[init(schedule=[set_led])]
@@ -52,24 +54,42 @@ const APP: () = {
         // Get flash and rcc registers
         let mut flash = dp.FLASH.constrain();
         let mut rcc = dp.RCC.constrain();
+        let mut afio = dp.AFIO.constrain(&mut rcc.apb2);
 
         // Freez clocks
-        let _clocks = rcc.cfgr.freeze(&mut flash.acr);
+        let clocks = rcc.cfgr.freeze(&mut flash.acr);
 
         // Get the gpios
         let mut gpioa = dp.GPIOA.split(&mut rcc.apb2);
         let mut gpiob = dp.GPIOB.split(&mut rcc.apb2);
-        let mut _gpioc = dp.GPIOC.split(&mut rcc.apb2);
+        let mut gpioc = dp.GPIOC.split(&mut rcc.apb2);
         let mut _gpiod = dp.GPIOD.split(&mut rcc.apb2);
         let mut _gpioe = dp.GPIOE.split(&mut rcc.apb2);
 
         // Config Onboard LED
-        let led = gpioa.pa5.into_push_pull_output(&mut gpioa.crl);
+        let led = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
 
         // Config of the buttons
         let btn_up = gpiob.pb13.into_pull_up_input(&mut gpiob.crh);
         let btn_down = gpiob.pb14.into_pull_up_input(&mut gpiob.crh);
         let btn_playpause = gpiob.pb12.into_pull_up_input(&mut gpiob.crh);
+
+        // Config of the tagreader
+        let spi_cs = gpioa.pa4.into_push_pull_output(&mut gpioa.crl);
+        let spi_clock = gpioa.pa5.into_alternate_push_pull(&mut gpioa.crl);
+        let spi_miso = gpioa.pa6.into_floating_input(&mut gpioa.crl);
+        let spi_mosi = gpioa.pa7.into_alternate_push_pull(&mut gpioa.crl);
+
+        let tagreader = tagreader::TagReader::new(
+            spi_cs,
+            spi_clock,
+            spi_mosi,
+            spi_miso,
+            dp.SPI1,
+            clocks,
+            &mut rcc.apb2,
+            &mut afio.mapr,
+        );
 
         // Schedule LED Task
         cx.schedule.set_led(cx.start, true).unwrap();
@@ -80,6 +100,7 @@ const APP: () = {
             btn_up,
             btn_down,
             btn_playpause,
+            tagreader,
         }
     }
 
