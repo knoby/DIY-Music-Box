@@ -17,7 +17,7 @@ mod player;
 mod tagreader;
 
 /// Period for blinking the on board led
-const LED_PERIOD: u32 = 8_000_000;
+const LED_PERIOD: u32 = 16_000_000;
 
 /// On board LED type alias
 type OnBoardLED =
@@ -58,8 +58,13 @@ const APP: () = {
         let mut rcc = dp.RCC.constrain();
         let mut afio = dp.AFIO.constrain(&mut rcc.apb2);
 
-        // Freez clocks
-        let clocks = rcc.cfgr.freeze(&mut flash.acr);
+        // Freez clockslet clocks = rcc
+        let clocks = rcc
+            .cfgr
+            .sysclk(32.mhz())
+            .pclk1(16.mhz())
+            .pclk2(32.mhz())
+            .freeze(&mut flash.acr);
 
         // Get the gpios
         let mut gpioa = dp.GPIOA.split(&mut rcc.apb2);
