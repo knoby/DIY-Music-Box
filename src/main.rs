@@ -36,6 +36,8 @@ const APP: () = {
         btn_playpause: buttons::BtnPlayPause,
         /// RFID Tag reader
         tagreader: tagreader::TagReader,
+        /// DFPlayer
+        player: player::DFPlayer,
     }
 
     #[init(schedule=[set_led])]
@@ -91,6 +93,19 @@ const APP: () = {
             &mut afio.mapr,
         );
 
+        // Init the Dfplayer
+        let serial_tx = gpioa.pa9.into_alternate_push_pull(&mut gpioa.crh);
+        let serial_rx = gpioa.pa10.into_floating_input(&mut gpioa.crh);
+
+        let player = player::DFPlayer::new(
+            dp.USART1,
+            serial_tx,
+            serial_rx,
+            &mut afio.mapr,
+            clocks,
+            &mut rcc.apb2,
+        );
+
         // Schedule LED Task
         cx.schedule.set_led(cx.start, true).unwrap();
 
@@ -101,6 +116,7 @@ const APP: () = {
             btn_down,
             btn_playpause,
             tagreader,
+            player,
         }
     }
 
