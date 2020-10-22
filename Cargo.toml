@@ -19,6 +19,10 @@ version = "0.7.0"
 features = ["cortex-m"]
 version = "0.2.2"
 
+[dependencies.panic-rtt-target]
+features = ["cortex-m"]
+version = "0.1.1"
+
 [profile.dev]
 
 [profile.release]

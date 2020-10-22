@@ -2,7 +2,8 @@
 #![no_main]
 
 // The panic behaviour
-use panic_halt as _;
+// use panic_halt as _;
+use panic_rtt_target as _;
 
 // The RTT logging feature
 use rtt_target::{rprintln, rtt_init_print};
