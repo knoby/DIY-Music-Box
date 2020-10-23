@@ -117,6 +117,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "diy-music-box"
+version = "0.1.0"
+dependencies = [
+ "cortex-m",
+ "cortex-m-rt",
+ "cortex-m-rtic",
+ "embedded-hal",
+ "panic-halt",
+ "panic-rtt-target",
+ "rtt-target",
+ "stm32f1xx-hal",
+]
+
+[[package]]
 name = "embedded-dma"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -289,20 +303,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "138e3e0acb6c9fb258b19b67cb8abd63c00679d2851805ea151465464fe9030a"
 dependencies = [
  "semver",
-]
-
-[[package]]
-name = "rustiebox"
-version = "0.1.0"
-dependencies = [
- "cortex-m",
- "cortex-m-rt",
- "cortex-m-rtic",
- "embedded-hal",
- "panic-halt",
- "panic-rtt-target",
- "rtt-target",
- "stm32f1xx-hal",
 ]
 
 [[package]]

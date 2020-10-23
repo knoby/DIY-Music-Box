@@ -10,6 +10,7 @@ use rtt_target::{rprintln, rtt_init_print};
 
 // Some global imports
 use rtic::app;
+use rtic::cyccnt::U32Ext;
 use stm32f1xx_hal::prelude::*;
 
 // Mods that are used in the application
@@ -60,6 +61,7 @@ const APP: () = {
         let mut afio = dp.AFIO.constrain(&mut rcc.apb2);
 
         // Freez clockslet clocks = rcc
+        rprintln!("Setting up Clocks");
         let clocks = rcc
             .cfgr
             .sysclk(32.mhz())
@@ -75,14 +77,17 @@ const APP: () = {
         let mut _gpioe = dp.GPIOE.split(&mut rcc.apb2);
 
         // Config Onboard LED
+        rprintln!("Setup Onboard LED");
         let led = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
 
         // Config of the buttons
+        rprintln!("Setup Inputs for buttons");
         let btn_up = gpiob.pb13.into_pull_up_input(&mut gpiob.crh);
         let btn_down = gpiob.pb14.into_pull_up_input(&mut gpiob.crh);
         let btn_playpause = gpiob.pb12.into_pull_up_input(&mut gpiob.crh);
 
         // Config of the tagreader
+        rprintln!("Setup Tagreader");
         let spi_cs = gpioa.pa4.into_push_pull_output(&mut gpioa.crl);
         let spi_clock = gpioa.pa5.into_alternate_push_pull(&mut gpioa.crl);
         let spi_miso = gpioa.pa6.into_floating_input(&mut gpioa.crl);
@@ -100,6 +105,7 @@ const APP: () = {
         );
 
         // Init the Dfplayer
+        rprintln!("Setup DFPlayer");
         let serial_tx = gpioa.pa9.into_alternate_push_pull(&mut gpioa.crh);
         let serial_rx = gpioa.pa10.into_floating_input(&mut gpioa.crh);
 
@@ -113,7 +119,11 @@ const APP: () = {
         );
 
         // Schedule LED Task
-        cx.schedule.set_led(cx.start, true).unwrap();
+        cx.schedule
+            .set_led(cx.start + LED_PERIOD.cycles(), true)
+            .unwrap();
+
+        rprintln!("Setup done");
 
         // Return late resources
         init::LateResources {
@@ -128,6 +138,7 @@ const APP: () = {
 
     #[idle(resources=[led])]
     fn idle(_cx: idle::Context) -> ! {
+        rprintln!("Entering Idle Loop");
         loop {
             cortex_m::asm::nop();
         }
@@ -136,7 +147,6 @@ const APP: () = {
     #[task(resources=[led], schedule=[set_led])]
     fn set_led(cx: set_led::Context, state: bool) {
         use embedded_hal::digital::v2::OutputPin;
-        use rtic::cyccnt::U32Ext;
 
         // set LED State
         if state {
