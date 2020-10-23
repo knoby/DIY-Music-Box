@@ -40,4 +40,11 @@ The differnt events are linked to one hardware resources (Button -> GPIO, Tag ->
 This events are generated in sepratat tasks that are triggerd regular (Tag) or with interrupts (Buttons)
 
 The idle function acts on an incomming event with an action (most of the time it will send a command to the DFPlayer). Therefore also a task is spawned that does the desired action. 
- 
+
+### Button Evaluation
+The Button down event is detected with an interrupt. The Interrupt schedules a task that checks the state of the pin and disables the interrupt. If the button is released within 1 second a short button press is detected. If the button stays down for longer than 1 second a long button press is detected
+
+### TAG Detection and readout
+The Idle task spanws a periodic task that checks the tag reader for presence of a tag. If a new tag is detected, therelevant datafiels are read out and send as an event to the applikation
+
+
