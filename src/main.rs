@@ -11,10 +11,8 @@ use panic_rtt_target as _;
 use rtt_target::{rprintln, rtt_init_print};
 
 // Some global imports
-use embedded_hal::digital::v2::InputPin;
 use rtic::app;
 use rtic::cyccnt::U32Ext;
-use stm32f1xx_hal::gpio::ExtiPin;
 use stm32f1xx_hal::prelude::*;
 
 // Mods that are used in the application
@@ -34,12 +32,12 @@ const APP: () = {
     struct Resources {
         /// Onboard LED on PA5 pin
         led: OnBoardLED,
-        /// Button for up actions
-        btn_up: buttons::BtnUp,
-        /// Button for down actions
-        btn_down: buttons::BtnDown,
-        /// Buttons for play and pause actions
-        btn_playpause: buttons::BtnPlayPause,
+        /// Buttons
+        buttons: (
+            buttons::Button<buttons::PinBtnUp>,
+            buttons::Button<buttons::PinBtnDown>,
+            buttons::Button<buttons::PinBtnPlayPause>,
+        ),
         /// RFID Tag reader
         tagreader: tagreader::TagReader,
         /// DFPlayer
@@ -106,6 +104,9 @@ const APP: () = {
             &dp.EXTI,
             &mut afio,
         );
+        let btn_up = buttons::Button::new(btn_up);
+        let btn_down = buttons::Button::new(btn_down);
+        let btn_playpause = buttons::Button::new(btn_playpause);
 
         // Config of the tagreader
         rprintln!("Setup Tagreader");
@@ -144,9 +145,7 @@ const APP: () = {
         // Return late resources
         init::LateResources {
             led,
-            btn_up,
-            btn_down,
-            btn_playpause,
+            buttons: (btn_up, btn_down, btn_playpause),
             tagreader,
             player,
             event_prod,
@@ -180,107 +179,99 @@ const APP: () = {
     //===============================================================================================
 
     //==== Button Up=====
-    #[task(binds=EXTI0, priority=5, resources=[btn_up], schedule=[btn_up_check])]
+    #[task(binds=EXTI0, priority=5, resources=[buttons], schedule=[btn_check])]
     fn btn_up_pressed(cx: btn_up_pressed::Context) {
-        cx.resources.btn_up.clear_interrupt_pending_bit();
-        cx.schedule
-            .btn_up_check(cx.start + CYCLES_10_MS.cycles(), 0)
-            .ok();
-    }
-
-    #[task(priority=5, resources=[btn_up, event_prod], schedule=[btn_up_check])]
-    fn btn_up_check(cx: btn_up_check::Context, iteration: u8) {
-        use app::{Button::*, Events::*};
-        // Check Iteration
-        if iteration >= 100 {
-            cx.resources
-                .event_prod
-                .enqueue(ButtonPressedLong(Up))
-                .unwrap();
-        } else {
-            // Check if button is pressed
-            if cx.resources.btn_up.is_low().unwrap() {
-                // Schedule next test
-                cx.schedule
-                    .btn_up_check(cx.scheduled + CYCLES_10_MS.cycles(), iteration + 1)
-                    .unwrap();
-            } else {
-                // Emit Event
-                cx.resources
-                    .event_prod
-                    .enqueue(ButtonPressedShort(Up))
-                    .unwrap();
-            }
+        if cx.resources.buttons.0.is_enabled() {
+            cx.resources.buttons.0.disable();
+            cx.schedule
+                .btn_check(cx.start + CYCLES_10_MS.cycles(), app::Button::Up, 0)
+                .ok();
         }
+        cx.resources.buttons.0.clear_interrupt_pending_bit();
     }
 
     //==== Button Down =====
-    #[task(binds=EXTI1, priority=5, resources=[btn_down], schedule=[btn_down_check])]
+    #[task(binds=EXTI1, priority=5, resources=[buttons], schedule=[btn_check])]
     fn btn_down_pressed(cx: btn_down_pressed::Context) {
-        cx.resources.btn_down.clear_interrupt_pending_bit();
-        cx.schedule
-            .btn_down_check(cx.start + CYCLES_10_MS.cycles(), 0)
-            .ok();
+        if cx.resources.buttons.1.is_enabled() {
+            cx.resources.buttons.1.disable();
+            cx.schedule
+                .btn_check(cx.start + CYCLES_10_MS.cycles(), app::Button::Down, 0)
+                .ok();
+        }
+        cx.resources.buttons.1.clear_interrupt_pending_bit();
     }
 
-    #[task(priority=5, resources=[btn_down, event_prod], schedule=[btn_down_check])]
-    fn btn_down_check(cx: btn_down_check::Context, iteration: u8) {
+    //==== Button PlayPause =====
+    #[task(binds=EXTI2, priority=5, resources=[buttons], schedule=[btn_check])]
+    fn btn_playpause_pressed(cx: btn_playpause_pressed::Context) {
+        if cx.resources.buttons.2.is_enabled() {
+            cx.resources.buttons.2.disable();
+            cx.schedule
+                .btn_check(cx.start + CYCLES_10_MS.cycles(), app::Button::PlayPause, 0)
+                .ok();
+        }
+        cx.resources.buttons.2.clear_interrupt_pending_bit();
+    }
+
+    // ==== Button Evaluation ====
+    #[task(priority=5, capacity = 3, resources=[buttons, event_prod], schedule=[btn_check, btn_enable])]
+    fn btn_check(cx: btn_check::Context, btn: app::Button, iteration: u8) {
         use app::{Button::*, Events::*};
         // Check Iteration
         if iteration >= 100 {
             cx.resources
                 .event_prod
-                .enqueue(ButtonPressedLong(Down))
+                .enqueue(ButtonPressedLong(btn))
+                .unwrap();
+            // Schedule btn enable
+            cx.schedule
+                .btn_enable(cx.scheduled + CYCLES_10_MS.cycles(), btn)
                 .unwrap();
         } else {
             // Check if button is pressed
-            if cx.resources.btn_down.is_low().unwrap() {
+            if match btn {
+                Up => cx.resources.buttons.0.is_low(),
+                Down => cx.resources.buttons.1.is_low(),
+                PlayPause => cx.resources.buttons.2.is_low(),
+            } {
                 // Schedule next test
                 cx.schedule
-                    .btn_down_check(cx.scheduled + CYCLES_10_MS.cycles(), iteration + 1)
+                    .btn_check(cx.scheduled + CYCLES_10_MS.cycles(), btn, iteration + 1)
                     .unwrap();
             } else {
                 // Emit Event
                 cx.resources
                     .event_prod
-                    .enqueue(ButtonPressedShort(Down))
+                    .enqueue(ButtonPressedShort(btn))
+                    .unwrap();
+                // Schedule btn enable
+                cx.schedule
+                    .btn_enable(cx.scheduled + CYCLES_10_MS.cycles(), btn)
                     .unwrap();
             }
         }
     }
 
-    //==== Button PlayPause =====
-    #[task(binds=EXTI2, priority=5, resources=[btn_playpause], schedule=[btn_playpause_check])]
-    fn btn_playpause_pressed(cx: btn_playpause_pressed::Context) {
-        cx.resources.btn_playpause.clear_interrupt_pending_bit();
-        cx.schedule
-            .btn_playpause_check(cx.start + CYCLES_10_MS.cycles(), 0)
-            .ok();
-    }
-
-    #[task(priority=5, resources=[btn_playpause, event_prod], schedule=[btn_playpause_check])]
-    fn btn_playpause_check(cx: btn_playpause_check::Context, iteration: u8) {
-        use app::{Button::*, Events::*};
-        // Check Iteration
-        if iteration >= 100 {
-            cx.resources
-                .event_prod
-                .enqueue(ButtonPressedLong(PlayPause))
-                .unwrap();
-        } else {
-            // Check if button is pressed
-            if cx.resources.btn_playpause.is_low().unwrap() {
-                // Schedule next test
-                cx.schedule
-                    .btn_playpause_check(cx.scheduled + CYCLES_10_MS.cycles(), iteration + 1)
-                    .unwrap();
-            } else {
-                // Emit Event
-                cx.resources
-                    .event_prod
-                    .enqueue(ButtonPressedShort(PlayPause))
-                    .unwrap();
+    #[task(priority=5, capacity=3, resources=[buttons], schedule=[btn_enable])]
+    fn btn_enable(cx: btn_enable::Context, btn: app::Button) {
+        use app::Button::*;
+        // Check if button is pressed
+        if match btn {
+            Up => cx.resources.buttons.0.is_high(),
+            Down => cx.resources.buttons.1.is_high(),
+            PlayPause => cx.resources.buttons.2.is_high(),
+        } {
+            match btn {
+                Up => cx.resources.buttons.0.enable(),
+                Down => cx.resources.buttons.1.enable(),
+                PlayPause => cx.resources.buttons.2.enable(),
             }
+        } else {
+            // Schedule btn enable
+            cx.schedule
+                .btn_enable(cx.scheduled + CYCLES_10_MS.cycles(), btn)
+                .unwrap();
         }
     }
 
