@@ -21,11 +21,14 @@ mod buttons;
 mod player;
 mod tagreader;
 
-const CYCLES_10_MS: u32 = 32_000_000 / 100;
+const CYCLES_10_MS: u32 = 64_000_000 / 100;
 
 /// On board LED type alias
 type OnBoardLED =
     stm32f1xx_hal::gpio::gpioc::PC13<stm32f1xx_hal::gpio::Output<stm32f1xx_hal::gpio::PushPull>>;
+
+/// Queue for sending events to main app logic
+static EVENT_QUEUE: heapless::mpmc::Q8<app::Events> = heapless::mpmc::Q8::new();
 
 #[app(device=stm32f1xx_hal::device, monotonic=rtic::cyccnt::CYCCNT, peripherals=true)]
 const APP: () = {
@@ -42,20 +45,10 @@ const APP: () = {
         tagreader: tagreader::TagReader,
         /// DFPlayer
         player: player::DFPlayer,
-        /// Event Reciver
-        event_cons: heapless::spsc::Consumer<'static, app::Events, heapless::consts::U8>,
-        /// Event Sender
-        event_prod: heapless::spsc::Producer<'static, app::Events, heapless::consts::U8>,
     }
 
-    #[init()]
+    #[init(spawn=[check_for_tag])]
     fn init(mut cx: init::Context) -> init::LateResources {
-        // Create Que
-        static mut QUEUE: Option<heapless::spsc::Queue<app::Events, heapless::consts::U8>> = None;
-        *QUEUE = Some(heapless::spsc::Queue::new());
-
-        let (event_prod, event_cons) = QUEUE.as_mut().unwrap().split();
-
         // Init the RTT Channel for logging
         rtt_init_print!();
 
@@ -76,9 +69,9 @@ const APP: () = {
         rprintln!("Setting up Clocks");
         let clocks = rcc
             .cfgr
-            .sysclk(32.mhz())
-            .pclk1(16.mhz())
-            .pclk2(32.mhz())
+            .sysclk(64.mhz())
+            .pclk1(32.mhz())
+            .pclk2(64.mhz())
             .freeze(&mut flash.acr);
 
         // Get the gpios
@@ -111,19 +104,18 @@ const APP: () = {
         // Config of the tagreader
         rprintln!("Setup Tagreader");
         let spi_cs = gpioa.pa4.into_push_pull_output(&mut gpioa.crl);
-        let spi_clock = gpioa.pa5.into_alternate_push_pull(&mut gpioa.crl);
-        let spi_miso = gpioa.pa6.into_floating_input(&mut gpioa.crl);
-        let spi_mosi = gpioa.pa7.into_alternate_push_pull(&mut gpioa.crl);
+        let spi_clock = gpiob.pb13.into_alternate_push_pull(&mut gpiob.crh);
+        let spi_miso = gpiob.pb14.into_floating_input(&mut gpiob.crh);
+        let spi_mosi = gpiob.pb15.into_alternate_push_pull(&mut gpiob.crh);
 
         let tagreader = tagreader::TagReader::new(
             spi_cs,
             spi_clock,
             spi_mosi,
             spi_miso,
-            dp.SPI1,
+            dp.SPI2,
             clocks,
-            &mut rcc.apb2,
-            &mut afio.mapr,
+            &mut rcc.apb1,
         );
 
         // Init the Dfplayer
@@ -142,22 +134,23 @@ const APP: () = {
 
         rprintln!("Setup done");
 
+        // Spwan tasks
+        cx.spawn.check_for_tag().unwrap();
+
         // Return late resources
         init::LateResources {
             led,
             buttons: (btn_up, btn_down, btn_playpause),
             tagreader,
             player,
-            event_prod,
-            event_cons,
         }
     }
 
-    #[idle(resources=[led, event_cons])]
-    fn idle(cx: idle::Context) -> ! {
+    #[idle(resources=[led ])]
+    fn idle(_cx: idle::Context) -> ! {
         rprintln!("Entering Idle Loop");
         loop {
-            match cx.resources.event_cons.dequeue() {
+            match EVENT_QUEUE.dequeue() {
                 Some(app::Events::NewTag) => rprintln!("Event: New Tag detected"),
                 Some(app::Events::ButtonPressedLong(button)) => match button {
                     app::Button::Up => rprintln!("Event: Button Up Pressed Long"),
@@ -172,6 +165,26 @@ const APP: () = {
                 None => (),
             }
         }
+    }
+
+    //===============================================================================================
+    //==== Handling of RFID Tags =====
+    //===============================================================================================
+
+    // ==== Check if a tag is in the field ====
+    #[task(priority=4, resources=[tagreader, led], schedule = [check_for_tag])]
+    fn check_for_tag(cx: check_for_tag::Context) {
+        use embedded_hal::digital::v2::OutputPin;
+        if cx.resources.tagreader.tag_present() {
+            cx.resources.led.set_low().unwrap();
+            EVENT_QUEUE.enqueue(app::Events::NewTag).unwrap();
+        } else {
+            cx.resources.led.set_high().unwrap();
+        }
+
+        cx.schedule
+            .check_for_tag(cx.scheduled + (CYCLES_10_MS * 50).cycles())
+            .unwrap();
     }
 
     //===============================================================================================
@@ -215,15 +228,12 @@ const APP: () = {
     }
 
     // ==== Button Evaluation ====
-    #[task(priority=5, capacity = 3, resources=[buttons, event_prod], schedule=[btn_check, btn_enable])]
+    #[task(priority=5, capacity = 3, resources=[buttons], schedule=[btn_check, btn_enable])]
     fn btn_check(cx: btn_check::Context, btn: app::Button, iteration: u8) {
         use app::{Button::*, Events::*};
         // Check Iteration
         if iteration >= 100 {
-            cx.resources
-                .event_prod
-                .enqueue(ButtonPressedLong(btn))
-                .unwrap();
+            EVENT_QUEUE.enqueue(ButtonPressedLong(btn)).unwrap();
             // Schedule btn enable
             cx.schedule
                 .btn_enable(cx.scheduled + CYCLES_10_MS.cycles(), btn)
@@ -241,10 +251,7 @@ const APP: () = {
                     .unwrap();
             } else {
                 // Emit Event
-                cx.resources
-                    .event_prod
-                    .enqueue(ButtonPressedShort(btn))
-                    .unwrap();
+                EVENT_QUEUE.enqueue(ButtonPressedShort(btn)).unwrap();
                 // Schedule btn enable
                 cx.schedule
                     .btn_enable(cx.scheduled + CYCLES_10_MS.cycles(), btn)
@@ -253,6 +260,7 @@ const APP: () = {
         }
     }
 
+    // ==== Enable Button reactivation ====
     #[task(priority=5, capacity=3, resources=[buttons], schedule=[btn_enable])]
     fn btn_enable(cx: btn_enable::Context, btn: app::Button) {
         use app::Button::*;
@@ -276,6 +284,8 @@ const APP: () = {
     }
 
     extern "C" {
-        fn CAN_RX1();
+        fn TIM2();
+        fn TIM3();
+        fn TIM4();
     }
 };

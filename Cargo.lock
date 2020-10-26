@@ -125,6 +125,8 @@ dependencies = [
  "cortex-m-rtic",
  "embedded-hal",
  "heapless",
+ "mfrc522",
+ "nb 1.0.0",
  "panic-halt",
  "panic-rtt-target",
  "rtt-target",
@@ -214,6 +216,15 @@ checksum = "55e2e4c765aa53a0424761bf9f41aa7a6ac1efa87238f59560640e27fca028f2"
 dependencies = [
  "autocfg",
  "hashbrown",
+]
+
+[[package]]
+name = "mfrc522"
+version = "0.2.1"
+source = "git+https://github.com/knoby/mfrc522?rev=96fba3c84101553131fb68ac1f9c044b85bae480#96fba3c84101553131fb68ac1f9c044b85bae480"
+dependencies = [
+ "embedded-hal",
+ "generic-array 0.14.4",
 ]
 
 [[package]]

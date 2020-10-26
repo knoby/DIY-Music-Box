@@ -9,6 +9,7 @@ cortex-m = "0.6.3"
 cortex-m-rt = "0.6.13"
 cortex-m-rtic = "0.5.5"
 embedded-hal = "0.2.4"
+nb = "1.0.0"
 
 [dependencies.panic-halt]
 optional = true
@@ -18,8 +19,13 @@ version = "0.2.0"
 features = ["ufmt-impl"]
 version = "0.5.6"
 
+[dependencies.mfrc522]
+git = "https://github.com/knoby/mfrc522"
+#path = "../mfrc522"
+rev = "96fba3c84101553131fb68ac1f9c044b85bae480"
+
 [dependencies.stm32f1xx-hal]
-features = ["rt", "stm32f103", "medium"]
+features = ["rt", "stm32f103"]
 version = "0.7.0"
 
 [dependencies.rtt-target]
@@ -42,3 +48,4 @@ panic-stop = ["panic-halt"]
 codegen-units = 1
 debug = true
 lto = true
+opt-level = "s"
