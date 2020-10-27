@@ -1,8 +1,8 @@
 /// Messages for task communication
-#[derive(Debug, Copy, Clone, PartialOrd, PartialEq)]
+#[derive(Debug)]
 pub enum Events {
     /// A new tag is in the field of the tag reader
-    NewTag,
+    NewTag(mfrc522::Uid),
     /// A button has been pressed long (>1s)
     ButtonPressedShort(Button),
     /// A button has been pressed short

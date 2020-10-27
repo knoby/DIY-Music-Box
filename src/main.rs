@@ -151,7 +151,7 @@ const APP: () = {
         rprintln!("Entering Idle Loop");
         loop {
             match EVENT_QUEUE.dequeue() {
-                Some(app::Events::NewTag) => rprintln!("Event: New Tag detected"),
+                Some(app::Events::NewTag(uid)) => rprintln!("Event: New Tag detected -- {:?}", uid),
                 Some(app::Events::ButtonPressedLong(button)) => match button {
                     app::Button::Up => rprintln!("Event: Button Up Pressed Long"),
                     app::Button::Down => rprintln!("Event: Button Down Pressed Long"),
@@ -175,9 +175,9 @@ const APP: () = {
     #[task(priority=4, resources=[tagreader, led], schedule = [check_for_tag])]
     fn check_for_tag(cx: check_for_tag::Context) {
         use embedded_hal::digital::v2::OutputPin;
-        if cx.resources.tagreader.tag_present() {
+        if let Some(uid) = cx.resources.tagreader.check_for_new_tag() {
             cx.resources.led.set_low().unwrap();
-            EVENT_QUEUE.enqueue(app::Events::NewTag).unwrap();
+            EVENT_QUEUE.enqueue(app::Events::NewTag(uid)).unwrap();
         } else {
             cx.resources.led.set_high().unwrap();
         }

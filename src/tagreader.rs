@@ -13,6 +13,7 @@ use rtt_target::rprintln;
 
 pub struct TagReader {
     device: mfrc522::Mfrc522<SpiDevice, PinCS>,
+    last_tag: Option<mfrc522::Uid>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -47,14 +48,34 @@ impl TagReader {
             _ => rprintln!("Detected unknown MFRC522 Version"),
         }
 
-        Self { device }
+        Self {
+            device,
+            last_tag: None,
+        }
     }
 
     /// Check if a tag is in the field
-    pub fn tag_present(&mut self) -> bool {
-        self.device
+    /// Returns Option<UID> if one is in the field and None if none is in the field
+    pub fn check_for_new_tag(&mut self) -> Option<mfrc522::Uid> {
+        // Safe current state of the tag
+        let last_tag = self.last_tag.take();
+
+        // Try to select a TAG and send it to HALT state
+        let uid = self
+            .device
             .wupa()
             .and_then(|atqa| self.device.select(&atqa))
-            .is_ok()
+            .and_then(|uid| self.device.hlta().map(|_| uid))
+            .ok();
+
+        // Safe for next time
+        self.last_tag = uid;
+
+        // Check if tag is new
+        if uid != last_tag && uid.is_some() {
+            uid
+        } else {
+            None
+        }
     }
 }
