@@ -22,7 +22,7 @@ version = "0.5.6"
 [dependencies.mfrc522]
 git = "https://github.com/knoby/mfrc522"
 #path = "../mfrc522"
-rev = "96fba3c84101553131fb68ac1f9c044b85bae480"
+rev = "de1a26ad741e6c0b6e26869a63bd7330bd6fc962"
 
 [dependencies.stm32f1xx-hal]
 features = ["rt", "stm32f103"]

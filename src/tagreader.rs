@@ -1,3 +1,4 @@
+use core::convert::TryFrom;
 use stm32f1xx_hal::gpio::{Alternate, Floating, Input, Output, PushPull};
 use stm32f1xx_hal::spi::*;
 
@@ -77,5 +78,31 @@ impl TagReader {
         } else {
             None
         }
+    }
+
+    /// Read the card with the given uid. Returs None if card is not readable oder has no valid cookie
+    pub fn read_card(&mut self, uid: mfrc522::Uid) -> Option<crate::app::Card> {
+        // Wakeup card
+        self.device
+            .wupa()
+            .and_then(|atqa| self.device.select(&atqa))
+            .ok()?;
+
+        // Try to start crypto
+        self.device
+            .mfauthent(0x04, &uid, &mfrc522::mifare::Key::default_key_a())
+            .ok()?;
+
+        // Read the data from the card
+        let data = self.device.mfread(0x04).ok()?;
+
+        // End crypto session
+        self.device.mfstopcrypto().ok()?;
+
+        // Send to sleep state
+        self.device.hlta().ok()?;
+
+        // Try to encode the data
+        crate::app::Card::try_from(data).ok()
     }
 }

@@ -11,6 +11,7 @@ use panic_rtt_target as _;
 use rtt_target::{rprintln, rtt_init_print};
 
 // Some global imports
+use core::convert::TryFrom;
 use rtic::app;
 use rtic::cyccnt::U32Ext;
 use stm32f1xx_hal::prelude::*;
@@ -151,7 +152,17 @@ const APP: () = {
         rprintln!("Entering Idle Loop");
         loop {
             match EVENT_QUEUE.dequeue() {
-                Some(app::Events::NewTag(uid)) => rprintln!("Event: New Tag detected -- {:?}", uid),
+                Some(app::Events::NewTag(card)) => {
+                    rprintln!("Event: New Tag detected -- {:?}", card);
+                    // Check if it is a modifyer tag
+                    if let Ok(modifyer) = app::Modifyer::try_from(card) {
+                        rprintln!("Found Modifyer Card: {:#?}", modifyer);
+                    } else if let Ok(mode) = app::Modus::try_from(card) {
+                        rprintln!("Found Normal Card: {:#?}", mode);
+                    } else {
+                        rprintln!("Unknown Card Type");
+                    };
+                }
                 Some(app::Events::ButtonPressedLong(button)) => match button {
                     app::Button::Up => rprintln!("Event: Button Up Pressed Long"),
                     app::Button::Down => rprintln!("Event: Button Down Pressed Long"),
@@ -177,7 +188,9 @@ const APP: () = {
         use embedded_hal::digital::v2::OutputPin;
         if let Some(uid) = cx.resources.tagreader.check_for_new_tag() {
             cx.resources.led.set_low().unwrap();
-            EVENT_QUEUE.enqueue(app::Events::NewTag(uid)).unwrap();
+            if let Some(card) = cx.resources.tagreader.read_card(uid) {
+                EVENT_QUEUE.enqueue(app::Events::NewTag(card)).unwrap();
+            }
         } else {
             cx.resources.led.set_high().unwrap();
         }
